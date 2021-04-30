@@ -58,6 +58,57 @@ BULK API:
  - to perform CRUD operations on more than 50,000 records at a single time
  - data loader api uses bulk api at the backend 
  
+ /services/data/vXX.0/jobs/ingest -  (post method)
+ {
+ {
+  "operation" : "insert",
+  "object" : "Account",
+  "contentType" : "CSV",
+  "lineEnding" : "CRLF"
+}
+ }
+ this gives you job id, we will use that later to upload our data
+ 
+ /services/data/v XX.0/jobs/ingest/ jobID/batches - (put method)
+ request headers - text/csv
+ request body - place your csv file
+ 
+ /services/data/v XX.0/jobs/ingest/ jobID - (patch method)
+ request headers - application/json
+ request body { "state":"UploadComplete" }
+ 
+ /services/data/v XX.0/jobs/ingest/ jobID - (get method) //to mnonitor the job
+ 
+ to get the successful results of that job
+ /services/data/v XX.0/jobs/ingest/ jobID/successfulResults (get method)
+ 
+ to get the unsuccessful results of that job
+ /services/data/v XX.0/jobs/ingest/ jobID/failedResults (get method)
+ 
+ So everything can be performed using bulk api, create a job, add data to the job, execute the job, monitor the job,
+ get the results of successful/unsuccessful records of that job.
+ 
+ Streaming API:
+ PushTopics: where you define the platform events that you are interested in.
+            soql query, your client apps subscribe to this pushtopic
+            
+            at a bare minimal level
+PushTopic pushTopic = new PushTopic();
+pushTopic.Name = 'AccountUpdates';
+pushTopic.Query = 'SELECT Id, Name, Phone FROM Account WHERE BillingCity=\'San Francisco\'';
+pushTopic.ApiVersion = 37.0;
+insert pushTopic;
+
+all values are by default true, if you want you can change them
+pushTopic.NotifyForOperationCreate = true;
+pushTopic.NotifyForOperationUpdate = true;
+pushTopic.NotifyForOperationUndelete = true;
+pushTopic.NotifyForOperationDelete = true;
+
+when you create a push topic, the push topic channel is automatically created for it. you subscribe 
+to this push topic channel to get the data
+
+ 
 
 
 
