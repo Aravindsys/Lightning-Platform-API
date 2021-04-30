@@ -1,0 +1,66 @@
+wsdl - Web Services Description Language
+rest api - communication by server and client
+soap api - communication between server to server
+bulk api - for handling more than 50,000 records. Async
+streaming api - pub/sub model for all event types
+tooling api - use it for custom development like objects or lightning apps and to retrieve metadata types 
+              in soql and sosl language
+
+api limits: 1)concurrent calls - particular number of long running calls(20 sec or more)
+                               - depends on org type
+                               - say developer ediiton org, can have 5 long running calls at once
+            2)total limits - total api calls within 24 hrs
+                           - depends on org type
+                           - say enterprise edition org have 200 total limits
+to view the api limits for your org
+setup > system overview
+
+to get notification of whether you are hitting more api calls, you can set it at
+setup > api notifications
+
+whenever you access anything in your visual studio code, you are using meta-data api
+
+REST API:
+
+/services/data - indicates that its a rest api request
+/services/data/v51.0/sobjects/account/describe
+/services/data/v51.0/sobjects/account  {"Name":"Test"}
+/services/data/vXX.0/query/?q=SELECT+Name+From+Account+WHERE+ShippingCity='San+Francisco'
+
+so CRUD operations on sObjects, soql on sObjects and Describe function on sObjects are natively exposed as 
+rest api services from salesforce
+
+SOAP API:
+you will be using wsdl files for making and getiing soap api responses
+wsdl files 2 types 1) enterprise wsdl - contains salesforce org configs,strongly types, for one salesforce org
+                   2) partner wsdl - does not contains salesforce org configs, weekly types,many salesforce org
+Whenever your salesforce org metadata changes, you need to generate new enterprise wsdl file.
+
+Once enterprise wsdl file is generated, we need to consume this file so that we will create classes. And we can use this classes to 
+make soap api request and response.
+for this, we can use any third-tools, the best one is SoapUI tool. Download and install it in your local machine
+create a proj name, give the enterprise wsdl file. Now under soapbindings, you can see all the actions you can perform using soap api
+
+note: tls 1.2 should be enabled for consuming salesforce soap api. if SoapUI Java version is 8 or higher, tls 1.2 is enabled by default,
+orelse enable it by  following this blogpost: https://blog.deadlypenguin.com/blog/2016/06/27/soapui-tls-1-2/
+
+remote site settings - those contents can be accessed by salesforce orgs
+csp(content security policies) - those contents can be accessed by Lightning components
+
+Soap api request and response contains 3 parts - envelope, header and body
+                                               - headrer and body will be present inside envelope
+If the IP address is unknown to salesforce, you need to append security token with password to login
+
+when you login for the first time, by providing username and password
+you get your instance url name and session Id, use this to make a rest/soap api request from next time onwards
+
+BULK API:
+ - to perform CRUD operations on more than 50,000 records at a single time
+ - data loader api uses bulk api at the backend 
+ 
+
+
+
+
+                   
+        
