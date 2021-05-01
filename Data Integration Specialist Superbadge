@@ -1,0 +1,18 @@
+1) store the remote system site in setup > remote site settings
+2) to authenticate to external systems
+store the credentials in setup > custom settings > serviceCredentials
+3) to invoke external systems REST API endpoints
+   store the credentials in
+   setup > named credentials > create new one
+ 4) To create a new connected app in your salesforce org
+    setup > app manager > new connected app > create new one
+    after its created, copy the consumer key and consumer secret for the connected app
+ 5) go to the connected app, copy the consumer key annd secret and get the token
+ 6) now register the token in your salesforce org, in custom settings > service token
+ 7) go to the connected app and test the connections now, 
+ 
+ Both salesforce and connected app has been integrated now, cool
+ 
+ i dont know why iam using custom settings > serviceCredentials
+ custom settings > serviceTokens should be passed in request header during making callouts
+ 
