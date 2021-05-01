@@ -109,7 +109,42 @@ when you create a push topic, the push topic channel is automatically created fo
 to this push topic channel to get the data
 
  
+Events can be created via 2 ways in salesforce
+programmatic - pushtopics - topic/<PUSHTOPICNAME>
+declaratively - setup > platform events - event/<EVENTNAME> //ends with __e
 
+generic streaming: - these events not tied upto any salesforce records and doesnt include any defined schema. can contain
+any payloads of their type
+                   - to enable them, first streaming channels is to be created.
+                   - can be done in 3 ways 1) create them in UI - streaming channel apps
+                                           2) using code // StreamingChannel ch = new StreamingChannel();
+ch.Name = '/u/Broadcast';
+insert ch; //                                 name should start with /u/
+                                           3) setup > user interface > enable enable dynamic streaming channel //salesforce creates it 
+                                                                                      dynamically for you
+                                                                                      
+ once streaming channel is setup, make clients subscribe to this streaming channel
+ now, you want to trigger an even to the streaming channel
+ triggered via rest api  /services/data/vXX.0/sobjects/StreamingChannel/Streaming Channel ID/push
+                         request body  {
+  "pushEvents": [
+      {
+          "payload": "Broadcast message to all subscribers",
+          "userIds": []
+      }
+   ]
+}
+
+reply ID field is rest response that are received by the subscribers:
+this is internally done and maintained by durable streaming API , v37.0 or higher
+when subscribers subscribe to an event, they use replyId to subscribe with
+-1, receive only new events
+-2, receive all the past and new events within the time window
+replyID, will receive past events from that replyID and new events as well 
+
+events are holdup for 24 hrs within the salesforce.
+  
+ 
 
 
 
