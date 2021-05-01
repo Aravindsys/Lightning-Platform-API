@@ -16,3 +16,309 @@ store the credentials in setup > custom settings > serviceCredentials
  i dont know why iam using custom settings > serviceCredentials
  custom settings > serviceTokens should be passed in request header during making callouts
  
+ to test your service callouts
+ 
+ Mock
+ @isTest
+global class ProjectCalloutServiceMock implements HttpCalloutMock{
+   //Implement http mock callout here
+   // Implement this interface method
+   global HTTPResponse respond(HTTPRequest request){
+       // Create a fake response
+       HttpResponse response = new HttpResponse();
+       response.setHeader('Content-Type', 'application/json');
+       response.setStatus('OK');
+       response.setStatusCode(201);
+              
+       return response;
+   }
+}
+
+MockFailure
+@isTest
+global class ProjectCalloutServiceMockFailure implements HttpCalloutMock{
+   //Implement http mock callout here
+   // Implement this interface method
+   global HTTPResponse respond(HTTPRequest request){
+       // Create a fake response
+       HttpResponse response = new HttpResponse();
+       response.setHeader('Content-Type', 'application/json');
+       response.setStatus('Bad Response');
+       response.setStatusCode(500);
+              
+       return response;
+   }
+}
+
+Testing REST API callouts
+
+@isTest
+private class ProjectCalloutServiceTest {
+  //Implement mock callout tests here
+   @testSetup static void testSetupdata(){
+        //create the opportunity record
+        Opportunity opp1 = new Opportunity();
+        opp1.Name = 'Test Opp1';
+        opp1.Type = 'New Project';
+        opp1.Amount = 100;
+        opp1.CloseDate = Date.today();
+        opp1.StageName = 'Submitted Project';
+        insert opp1;
+        //create the opportunity record
+        Opportunity opp2 = new Opportunity();
+        opp2.Name = 'Test Opp2';
+        opp2.Type = 'New Project';
+        opp2.Amount = 200;
+        opp2.CloseDate = Date.today();
+        opp2.StageName = 'Resubmit Project';
+        insert opp2;
+        //create the Custom Settings
+        ServiceTokens__c servToken = new ServiceTokens__c();
+        servToken.Name = 'ProjectServiceToken';
+        servToken.Token__c = 'qwertyuiopnjhgft';
+        insert servToken;
+    }
+  
+  @isTest
+  static void testSuccessMessage(){
+      Opportunity opp = [Select Id, Name FROM Opportunity WHERE Name = 'Test Opp1' Limit 1];
+      List<Id> lstOfOppIds = new List<Id>();
+      lstOfOppIds.add(opp.Id);
+      // Set mock callout class
+      Test.setMock(HttpCalloutMock.class, new ProjectCalloutServiceMock());
+      // This causes a fake response to be sent
+      // from the class that implements HttpCalloutMock. 
+      Test.startTest();
+          ProjectCalloutService.postOpportunityToPMS(lstOfOppIds);
+      Test.stopTest();    
+      // Verify that the response received contains fake values        
+      opp = [select StageName from Opportunity where id =: opp.Id];
+      System.assertEquals('Submitted Project',opp.StageName);     
+  }
+  
+  @isTest
+  static void testFailureMessage(){
+      Opportunity opp = [Select Id, Name FROM Opportunity WHERE Name = 'Test Opp2' Limit 1];
+      List<Id> lstOfOppIds = new List<Id>();
+      lstOfOppIds.add(opp.Id);
+      // Set mock callout class
+      Test.setMock(HttpCalloutMock.class, new ProjectCalloutServiceMockFailure());
+      // This causes a fake response to be sent
+      // from the class that implements HttpCalloutMock. 
+      Test.startTest();
+          ProjectCalloutService.postOpportunityToPMS(lstOfOppIds);
+      Test.stopTest();    
+      // Verify that the response received contains fake values        
+      opp = [select StageName from Opportunity where id =: opp.Id];
+      System.assertEquals('Resubmit Project',opp.StageName);
+  }
+}
+
+If incase anything failed, we can rollback to previous state of the database using
+SavePoint sp1 = Database.setSavePoint();
+Database.rollback(sp1);
+
+Exposing apex as REST API services:
+@RestResource(urlMapping = '/project/*')
+global with sharing class ProjectRESTService {
+    @HttpPost
+    global static String postProjectData(String ProjectRef, String ProjectName, String OpportunityId,
+                                       Date StartDate, Date EndDate, Double Amount, String Status){
+        String retMsg = 'Error';
+                
+        SavePoint sp1 = Database.setSavePoint();
+        try{
+            List<Opportunity> lstOfOpps = new List<Opportunity>();
+            
+            if(OpportunityId != null && OpportunityId.trim().length() > 0){
+                Opportunity opp = [SELECT Id, DeliveryInstallationStatus__c FROM Opportunity WHERE Id = :OpportunityId];
+                opp.DeliveryInstallationStatus__c = 'In progress';
+                                
+                lstOfOpps.add(opp);
+            }
+            UPDATE lstOfOpps;
+            
+            List<Project__c> lstOfRrjts = new List<Project__c>();
+            
+            Project__c prjt = new Project__c();
+            prjt.ProjectRef__c = ProjectRef;
+            prjt.Name = ProjectName;
+            prjt.Opportunity__c = OpportunityId;
+            prjt.Start_Date__c = StartDate;
+            prjt.End_Date__c = EndDate;
+            prjt.Billable_Amount__c = Amount;
+            prjt.Status__c = Status;
+            
+            lstOfRrjts.add(prjt);
+            
+            UPSERT lstOfRrjts;
+            
+            retMsg = 'OK';
+        }catch(Exception ex){
+            Database.rollback(sp1);
+            retMsg = ex.getMessage();
+        }
+        return retMsg;
+    }
+}
+
+Testing Apex REST API:
+@isTest
+private class ProjectRESTServiceTest {
+    @testSetup
+    static void loadServiceData(){
+        Opportunity opp = new Opportunity();
+        opp.Name = 'Test Opportunity';
+        opp.DeliveryInstallationStatus__c = 'In progress';
+        opp.CloseDate = (Date.today()).addDays(20);
+        opp.StageName = 'Submitted Project';
+        INSERT opp;
+        
+        Project__c prjt = new Project__c();
+        prjt.ProjectRef__c = 'ProjectRef';
+        prjt.Name = 'ProjectName';
+        prjt.Opportunity__c = opp.Id;
+        prjt.Start_Date__c = Date.today();
+        prjt.End_Date__c = (Date.today()).addDays(10);
+        prjt.Billable_Amount__c = 1000;
+        prjt.Status__c = 'Running';
+        INSERT prjt;
+    }
+    
+    @isTest    
+    static void testProjectRESTService(){
+        Project__c prjt = [SELECT Id, ProjectRef__c, Name, Opportunity__c, Start_Date__c, End_Date__c, Billable_Amount__c, Status__c FROM Project__c LIMIT 1];
+        Test.startTest();
+        Opportunity opp = [SELECT Id FROM Opportunity LIMIT 1];
+        System.assertEquals(1,[SELECT count() FROM Opportunity]);                          
+        String returnMessage = ProjectRESTService.postProjectData('ProjectRef', 'ProjectName', String.valueOf(opp.Id),  Date.today(), Date.today(), 1000, 'Running');                          
+        Test.stopTest();
+    }
+}
+
+
+soap api proxy callout class created from wsdl file
+after that 
+soap api cal outs
+public class BillingCalloutService {
+    @future(callout = true)
+    public static void callBillingService(String projectRef, Decimal billingAmount){
+        ServiceCredentials__c srvcCrd = ServiceCredentials__c.getValues('BillingServiceCredential');
+                
+        BillingServiceProxy.project projectInst = new BillingServiceProxy.project();
+        projectInst.username = srvcCrd.Username__c;
+        projectInst.password = srvcCrd.Password__c;
+        projectInst.billAmount = billingAmount;
+        
+        BillingServiceProxy.InvoicesPortSoap11 invPortSoapInst = new BillingServiceProxy.InvoicesPortSoap11();
+        String response = invPortSoapInst.billProject(projectInst);
+        
+        List<Project__c> lstOfProjects = new List<Project__c>();
+        if(response != null && response.equalsIgnoreCase('OK')){
+            List<Project__c> lstOfPrjts = [SELECT Status__c FROM Project__c WHERE ProjectRef__c = :projectRef];
+            for(Project__c prjt : lstOfPrjts){
+                prjt.Status__c = 'Billed';
+                
+                lstOfProjects.add(prjt);
+            }
+            
+            UPDATE lstOfProjects;
+        }
+    }
+}
+
+trigger condition for calling the soap api
+trigger ProjectTrigger on Project__c (after update) {
+    if(Trigger.isAfter && Trigger.isUpdate){
+        for(Project__c prjt : Trigger.new){
+            if(prjt.Status__c != null && prjt.Status__c.equals('Billable')){
+                BillingCalloutService.callBillingService(prjt.ProjectRef__c, prjt.Billable_Amount__c);
+            }
+        }
+    }
+}
+
+setting soap api mock:
+@isTest
+global class BillingCalloutServiceMock implements WebServiceMock {
+   global void doInvoke(Object stub,Object request,Map<String, Object> response,String endpoint,String soapAction,String requestName,String responseNS, String responseName,String responseType){
+           BillingServiceProxy.billProjectResponse_element response_x = new BillingServiceProxy.billProjectResponse_element();
+           response_x.status = 'OK';
+           response.put('response_x', response_x);
+    }
+}
+
+setting soap api mockFailure:
+global class BillingCalloutServiceMockFailure implements WebServiceMock {
+    global void doInvoke(Object stub,Object request,Map<String, Object> response,String endpoint,String soapAction, String requestName, String responseNS,String responseName,String responseType) {
+        BillingServiceProxy.billProjectResponse_element response_x = new BillingServiceProxy.billProjectResponse_element();
+        response_x.status = 'ERROR';
+        response.put('response_x', response_x);
+    }
+}
+
+testing the soap api data:
+@isTest
+private class BillingCalloutServiceTest {
+  @testSetup static void loadData(){
+        
+        Opportunity oppo = new Opportunity();
+        oppo.Name = 'TestOpp1';
+        oppo.CloseDate = Date.today();
+        oppo.StageName = 'Prospecting';
+        insert oppo;
+        
+        Project__c proj = new Project__c();
+        proj.Name = 'TestProj1';
+        proj.Billable_Amount__c = 1000;        
+        proj.ProjectRef__c = 'TestRef1';
+        proj.Status__c = 'Running';
+        proj.Opportunity__c = oppo.Id;
+        insert proj;
+        
+        ServiceCredentials__c servCred = new ServiceCredentials__c();
+        servCred.Name = 'BillingServiceCredential';
+        servCred.Username__c = 'usr1';
+        servCred.Password__c = 'pwd1';
+        insert servCred;
+    }
+    
+    @isTest static void testCalloutSuccess(){
+        Test.setMock(WebServiceMock.class, new BillingCalloutServiceMock()); 
+        List<Project__c> prjt = [SELECT Status__C FROM Project__c WHERE ProjectRef__c = 'TestRef1'];
+        System.assertEquals(1, prjt.size());
+        Test.startTest(); 
+            prjt[0].Status__c = 'Billable';
+            update prjt;
+        Test.stopTest();
+    }
+    
+    @isTest static void testCalloutFailure(){
+        Test.setMock(WebServiceMock.class, new BillingCalloutServiceMockFailure()); 
+        List<Project__c> prjt = [SELECT Status__C FROM Project__c WHERE ProjectRef__c = 'TestRef1'];
+        System.assertEquals(1, prjt.size());
+        Test.startTest(); 
+            prjt[0].Status__c = 'Running';
+            update prjt;
+        Test.stopTest();
+    }
+}
+
+Salesforce connect:
+without using programmatic code, you can access external systems and get their data
+only used for getting data and doing simple stuffs.
+automatically to sync with external data
+they are available as external objects in salesforce
+in salesforce connect, give the url you need to hit
+
+to access salesforce connect setup > external data sources
+to acces external objects setup > external objects
+
+only if the data changes in external systems, it changes in salesforce org, its reverse doesnt work.
+ - external objects can never have masterdetail relationships
+ - lookup - linked to salesforce objects
+ - external lookup - linked to other external objects
+ - indirect lookup - linked to salesforce objects but refernced via parent object any fields
+
+
+ 
